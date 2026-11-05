@@ -35,6 +35,7 @@ stages:
     required_checks:
       - CI — Build & Test
       - Deploy to Staging
+      - Integration Tests
     required_reviewers:
       min_approvals: 1
   evidencing:
