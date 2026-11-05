@@ -1,0 +1,57 @@
+name: "Integration Tests"
+
+on:
+  workflow_run:
+    workflows: ["Deploy to Staging"]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      fail:
+        description: "Include the deliberately failing case"
+        default: "0"
+      attach_junit:
+        description: "Also attach the JUnit XML to the upload"
+        default: "0"
+
+jobs:
+  integration:
+    name: "Integration Tests"
+    if: github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    env:
+      INTEG_FAIL: ${{ inputs.fail || vars.INTEG_FAIL || '0' }}
+      ATTACH_JUNIT: ${{ inputs.attach_junit || vars.INTEG_ATTACH_JUNIT || '0' }}
+      LANESYNC_VERSION: ${{ vars.LANESYNC_RELEASE_VERSION || 'v0.2.0' }}
+      SDLC_API_URL: ${{ vars.SDLC_API_URL || 'https://unrelishable-erika-nonfactiously.ngrok-free.dev' }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt
+      - name: Run integration tests against staging
+        id: tests
+        continue-on-error: true
+        run: python -m pytest tests_integration --junitxml=integration-junit.xml -o junit_suite_name=integration
+      - name: Get LaneSync token (API key, else GitHub OIDC)
+        id: auth
+        if: always()
+        env:
+          LANESYNC_API_KEY: ${{ secrets.LANESYNC_API_KEY }}
+        run: |
+          if [ -n "$LANESYNC_API_KEY" ]; then TOKEN="$LANESYNC_API_KEY"; else
+            TOKEN=$(curl -sf -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=lanesync" | jq -r '.value // empty'); fi
+          echo "::add-mask::$TOKEN"; echo "token=$TOKEN" >> "$GITHUB_OUTPUT"
+      - name: Upload integration results to LaneSync
+        if: always()
+        env:
+          LANESYNC_TOKEN: ${{ steps.auth.outputs.token }}
+        run: python scripts/upload_integration.py integration-junit.xml
+      - name: Fail the job when integration tests failed
+        if: steps.tests.outcome == 'failure'
+        run: exit 1
