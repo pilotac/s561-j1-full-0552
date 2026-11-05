@@ -1,0 +1,43 @@
+# ── LaneSync-managed workflow ─────────────────────────────────────────────
+# This file is owned by LaneSync. Future "Update workflows" PRs may replace
+# custom edits you make here. Review the PR diff before merging.
+name: "Deploy to Staging"
+
+on:
+  push:
+    branches: [ "main*" ]
+  pull_request:
+    branches: [ "main*" ]
+
+jobs:
+  deploy:
+    name: "Deploy to Staging"
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # IMPORTANT: Replace this step with your actual deployment scripts for the staging environment!
+      - name: Deploy to Staging Environment
+        run: |
+          echo "Simulating deployment to Staging..."
+          echo "✅ Staging Deployment Successful"
+
+      # IMPORTANT: Replace with smoke tests / health checks against the deployed staging environment.
+      # Note: Integration tests and security scans run in CI (ci.yml), not here.
+      - name: Smoke Test Staging
+        run: |
+          echo "Running basic smoke tests against staging..."
+          echo "✅ Smoke Tests Passed"
+
+      - name: Upload evidence to LaneSync
+        uses: ./.github/actions/lanesync-upload
+        if: always()
+        with:
+          api-url: ${{ vars.SDLC_API_URL || 'https://unrelishable-erika-nonfactiously.ngrok-free.dev' }}
+          api-key: ${{ secrets.LANESYNC_API_KEY }}
+          dev-branch: "main"
+          release-prefix: "main"
+          pipeline: "Deploy to Staging"
